@@ -1,0 +1,50 @@
+{
+  "name": "pdfbook",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start",
+    "test": "jest",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@react-native-community/datetimepicker": "^2.6.0",
+    "@react-native-community/progress-bar-android": "^1.0.3",
+    "@react-native-community/progress-view": "^1.0.3",
+    "@react-native-community/push-notification-ios": "github:react-native-community/push-notification-ios",
+    "@react-navigation/drawer": "^5.8.5",
+    "react": "16.13.1",
+    "react-native": "0.63.0",
+    "react-native-alarm-notification": "^1.4.6",
+    "react-native-android-datetime-picker": "0.0.10",
+    "react-native-drawer": "^2.5.1",
+    "react-native-drawer-menu": "^0.2.5",
+    "react-native-gesture-handler": "^1.6.1",
+    "react-native-hamburger": "0.0.2",
+    "react-native-modal-datetime-picker": "^8.7.1",
+    "react-native-pdf": "^6.2.0",
+    "react-native-permissions": "^2.1.5",
+    "react-native-push-notification": "^4.0.0",
+    "react-native-restart": "0.0.17",
+    "react-native-rtl-layout": "0.0.1",
+    "react-native-side-drawer": "^1.2.6",
+    "react-native-view-pdf": "^0.11.0",
+    "react-weekday-picker": "^1.0.8",
+    "rn-fetch-blob": "^0.12.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.10.4",
+    "@babel/runtime": "^7.10.4",
+    "@react-native-community/eslint-config": "^2.0.0",
+    "babel-jest": "^26.1.0",
+    "eslint": "^7.4.0",
+    "jest": "^26.1.0",
+    "metro-react-native-babel-preset": "^0.60.0",
+    "react-test-renderer": "16.13.1"
+  },
+  "jest": {
+    "preset": "react-native"
+  }
+}
