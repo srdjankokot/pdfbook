@@ -14,9 +14,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "&#x645;&#x642;&#x627;&#x644;&#x64a;&#x62f; &#x627;&#x644;&#x633;&#x645;&#x627;&#x648;&#x627;&#x62a; &#x648;&#x627;&#x644;&#x627;&#x654;&#x631;&#x636; &#x645;&#x639; &#x62d;&#x635;&#x646; &#x627;&#x644;&#x645;&#x648;&#x654;&#x645;&#x646;.app"
-               BlueprintName = "pdfbook"
+               BlueprintIdentifier = "2D02E47A1E0B4A5D006451C7"
+               BuildableName = "pdfbook-tvOS.app"
+               BlueprintName = "pdfbook-tvOS"
                ReferencedContainer = "container:pdfbook.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -32,9 +32,9 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "pdfbookTests.xctest"
-               BlueprintName = "pdfbookTests"
+               BlueprintIdentifier = "2D02E48F1E0B4A5D006451C7"
+               BuildableName = "pdfbook-tvOSTests.xctest"
+               BlueprintName = "pdfbook-tvOSTests"
                ReferencedContainer = "container:pdfbook.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -54,9 +54,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "&#x645;&#x642;&#x627;&#x644;&#x64a;&#x62f; &#x627;&#x644;&#x633;&#x645;&#x627;&#x648;&#x627;&#x62a; &#x648;&#x627;&#x644;&#x627;&#x654;&#x631;&#x636; &#x645;&#x639; &#x62d;&#x635;&#x646; &#x627;&#x644;&#x645;&#x648;&#x654;&#x645;&#x646;.app"
-            BlueprintName = "pdfbook"
+            BlueprintIdentifier = "2D02E47A1E0B4A5D006451C7"
+            BuildableName = "pdfbook-tvOS.app"
+            BlueprintName = "pdfbook-tvOS"
             ReferencedContainer = "container:pdfbook.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -71,9 +71,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "&#x645;&#x642;&#x627;&#x644;&#x64a;&#x62f; &#x627;&#x644;&#x633;&#x645;&#x627;&#x648;&#x627;&#x62a; &#x648;&#x627;&#x644;&#x627;&#x654;&#x631;&#x636; &#x645;&#x639; &#x62d;&#x635;&#x646; &#x627;&#x644;&#x645;&#x648;&#x654;&#x645;&#x646;.app"
-            BlueprintName = "pdfbook"
+            BlueprintIdentifier = "2D02E47A1E0B4A5D006451C7"
+            BuildableName = "pdfbook-tvOS.app"
+            BlueprintName = "pdfbook-tvOS"
             ReferencedContainer = "container:pdfbook.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

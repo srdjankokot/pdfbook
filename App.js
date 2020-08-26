@@ -23,6 +23,10 @@ import BookContentsShort from "./book_content_short.json"
 import NotifService from './NotifService';
 import { RTLView, RTLText } from 'react-native-rtl-layout'
 
+import AlarmPicker from './TimePicker'
+import moment from 'moment';
+
+
 export default class PDFExample extends React.Component {
   
   constructor(props) {
@@ -36,6 +40,7 @@ export default class PDFExample extends React.Component {
   scheduledLocalNotifications(scheduledLocalNotifications) {
     if (scheduledLocalNotifications != null) {
       this.setState({ scheduleNotif: scheduledLocalNotifications });
+      console.log("scheduledLocalNotifications: ", scheduledLocalNotifications);
       this.setState({
         bookContent: BookContents
       })
@@ -74,17 +79,44 @@ export default class PDFExample extends React.Component {
     this.setState({ isDateTimePickerVisible: false });
   };
  
-  handleDatePicked = date => {
-    console.log("A date has been picked: ", date);
+  handleDatePicked = (date, days) => {
+    
+    console.log("A date has been pickedssss: ", days);
 
-    this.scheduleNewLovalNotif(date);
+    var now = moment();
+    var nowPlusWeek = moment().add(1, 'week');
+    var currentTime = new Date();
+
+    for (var i = 0, keys = Object.keys(days), ii = keys.length; i < ii; i++) {
+     
+      if (days[keys[i]] == 1) 
+      {
+        // console.log('key : ' + keys[i] + ' val : ' + days[keys[i]]);
+        
+        var day = now.clone().weekday(keys[i])
+
+        // console.log(now);
+        // console.log(day.toDate());
+
+        if(now > day.toDate())
+          day = nowPlusWeek.clone().weekday(keys[i])
+     
+        date.setMonth(day.toDate().getMonth(), day.toDate().getDate())
+        date.setSeconds(0);
+        this.scheduleNewLovalNotif(date, keys[i]);
+        console.log('Schedule date : ', date);
+      } 
+    }
+    this.refreshContentMenu();
+
     this.hideDateTimePicker();
   };
 
   createNewAlarm = (alarmId, alarmTitle, pageNumber) => {
     //Schedule Future Alarm
     if (this.isScheduled(alarmId)) {
-      this.notif.cancelLocalNotifications(alarmId);
+      this.removeAlarmForContentId(alarmId);
+      // this.notif.cancelLocalNotifications(alarmId);
       this.refreshContentMenu();
     }
     else {
@@ -94,19 +126,35 @@ export default class PDFExample extends React.Component {
     }
   }
 
-  scheduleNewLovalNotif= (date) =>
+  scheduleNewLovalNotif= (date, day) =>
   {
-    this.notif.scheduleNotif(this.state.alarmId, this.state.alarmTitle, this.state.pageNumber, date);
-    this.refreshContentMenu();
+    var id = this.state.alarmId + day;
+    console.log('Schedule id : ', id);
+    this.notif.scheduleNotif(id, this.state.alarmTitle+ "_"+day, this.state.pageNumber, date);
+    // this.refreshContentMenu();
   }
 
 
+  removeAlarmForContentId=(contentId)=>{
+    this.state.scheduleNotif.map((data) => {
+      var id = data.id.substring(0, data.id.length-1)
+      // if(data.id.startsWith(contentId.toString(),0, contentId.toString().length))
+      if(id==contentId)
+      {
+        scheduled = true;
+        this.notif.cancelLocalNotifications(data.id);
+      }
+    })
+  }
 
   isScheduled = (contentId) => {
-
     var scheduled = false;
     this.state.scheduleNotif.map((data) => {
-      if (parseInt(data.id) == contentId) {
+
+      var id = data.id.substring(0, data.id.length-1)
+      // if(data.id.startsWith(contentId.toString(),0, contentId.toString().length))
+      if(id==contentId)
+      {
         scheduled = true;
       }
     })
@@ -182,8 +230,9 @@ export default class PDFExample extends React.Component {
           keyExtractor={item => item.id}
         />
 
+{/* changing book version */}
 
-<View style={styles.switchHolder}>
+{/* <View style={styles.switchHolder}>
 <RTLText >مختصر</RTLText>
    
 <Switch
@@ -195,7 +244,10 @@ export default class PDFExample extends React.Component {
 
 <RTLText >كامل</RTLText>
 
-</View>
+</View> */}
+
+
+
       </View>
     );
   };
@@ -223,7 +275,7 @@ export default class PDFExample extends React.Component {
       mask: {}, // style of mask if it is enabled
       main: {} // style of main board
     };
-
+  
     return (
 
       <Drawer
@@ -277,13 +329,27 @@ export default class PDFExample extends React.Component {
             page={this.state.initialPage}
 
           />
+    
+    <AlarmPicker
+     isVisible={this.state.isDateTimePickerVisible}
+     onOutside = {() => {
+      this.setState({isDateTimePickerVisible:false});
+    }}
 
-          <DateTimePicker
+    onCancelPress = {() => {
+      this.setState({isDateTimePickerVisible:false});
+    }}
+    onSetPress = {this.handleDatePicked}
+    
+     />
+          {/* <DateTimePicker
             isVisible={this.state.isDateTimePickerVisible}
             onConfirm={this.handleDatePicked}
+            
             onCancel={this.hideDateTimePicker}
             mode={'time'}
-          />
+          >
+          </DateTimePicker> */}
 
         </View>
       </Drawer>
@@ -330,7 +396,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   
     justifyContent: 'center',
-    padding: 5
+    padding: 5,
   },
 
   toolbar:{
