@@ -57,3 +57,7 @@ buck-out/
 
 # CocoaPods
 /ios/Pods/
+
+# Play upload key — never commit these
+android/keystore.properties
+android/app/upload-keystore.p12

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1130"
+   LastUpgradeVersion = "1210"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "&#x645;&#x642;&#x627;&#x644;&#x64a;&#x62f; &#x627;&#x644;&#x633;&#x645;&#x627;&#x648;&#x627;&#x62a; &#x648;&#x627;&#x644;&#x627;&#x654;&#x631;&#x636; &#x645;&#x639; &#x62d;&#x635;&#x646; &#x627;&#x644;&#x645;&#x648;&#x654;&#x645;&#x646;.app"
+               BuildableName = "pdfbook.app"
                BlueprintName = "pdfbook"
                ReferencedContainer = "container:pdfbook.xcodeproj">
             </BuildableReference>
@@ -55,7 +55,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "&#x645;&#x642;&#x627;&#x644;&#x64a;&#x62f; &#x627;&#x644;&#x633;&#x645;&#x627;&#x648;&#x627;&#x62a; &#x648;&#x627;&#x644;&#x627;&#x654;&#x631;&#x636; &#x645;&#x639; &#x62d;&#x635;&#x646; &#x627;&#x644;&#x645;&#x648;&#x654;&#x645;&#x646;.app"
+            BuildableName = "pdfbook.app"
             BlueprintName = "pdfbook"
             ReferencedContainer = "container:pdfbook.xcodeproj">
          </BuildableReference>
@@ -72,7 +72,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "&#x645;&#x642;&#x627;&#x644;&#x64a;&#x62f; &#x627;&#x644;&#x633;&#x645;&#x627;&#x648;&#x627;&#x62a; &#x648;&#x627;&#x644;&#x627;&#x654;&#x631;&#x636; &#x645;&#x639; &#x62d;&#x635;&#x646; &#x627;&#x644;&#x645;&#x648;&#x654;&#x645;&#x646;.app"
+            BuildableName = "pdfbook.app"
             BlueprintName = "pdfbook"
             ReferencedContainer = "container:pdfbook.xcodeproj">
          </BuildableReference>

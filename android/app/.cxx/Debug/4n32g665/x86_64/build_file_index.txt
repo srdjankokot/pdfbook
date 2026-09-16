@@ -1,0 +1,5 @@
+/Users/srdjankokot/Documents/Projects/pdfbook/node_modules/@react-native-community/datetimepicker/android/build/generated/source/codegen/jni/CMakeLists.txt
+/Users/srdjankokot/Documents/Projects/pdfbook/node_modules/react-native-blob-util/android/build/generated/source/codegen/jni/CMakeLists.txt
+/Users/srdjankokot/Documents/Projects/pdfbook/node_modules/react-native-pdf/android/build/generated/source/codegen/jni/CMakeLists.txt
+/Users/srdjankokot/Documents/Projects/pdfbook/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt
+/Users/srdjankokot/Documents/Projects/pdfbook/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt
