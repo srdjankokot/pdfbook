@@ -1,5 +1,5 @@
 import React, {Component} from 'react';
-import {Animated, Dimensions, Easing, StyleSheet, TouchableWithoutFeedback, View} from 'react-native';
+import {Animated, Dimensions, Easing, Modal, StyleSheet, TouchableWithoutFeedback, View} from 'react-native';
 import {colors, shadow} from './theme';
 
 /**
@@ -58,17 +58,23 @@ export default class Drawer extends Component {
       <View style={styles.root}>
         {children}
 
-        {open && (
+        {/* A Modal draws in its own window above the elevated header and the
+            native PDF view, and routes Android's back button to
+            onRequestClose instead of leaving the app. */}
+        <Modal
+          visible={open}
+          transparent={true}
+          animationType={'none'}
+          statusBarTranslucent={true}
+          navigationBarTranslucent={true}
+          onRequestClose={this.closeDrawer}>
           <TouchableWithoutFeedback onPress={this.closeDrawer}>
             <Animated.View style={[styles.scrim, {opacity: this.progress}]} />
           </TouchableWithoutFeedback>
-        )}
-
-        {open && (
           <Animated.View style={[styles.panel, {width, transform: [{translateX}]}]}>
             {drawerContent}
           </Animated.View>
-        )}
+        </Modal>
       </View>
     );
   }
@@ -79,7 +85,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrim: {
-    ...StyleSheet.absoluteFillObject,
+    // absoluteFillObject was removed in React Native 0.87; spreading it gave
+    // the scrim no size, so it was invisible and could not be tapped.
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.overlay,
   },
   panel: {
