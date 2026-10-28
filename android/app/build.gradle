@@ -65,7 +65,7 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -90,8 +90,8 @@ android {
         applicationId "com.maqalid.hisnalmumin"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.0.1"
         // All four ABIs stay in (see reactNativeArchitectures in
         // gradle.properties): the App Bundle splits per device, so a phone only
         // ever downloads its own. Build a slim APK with

@@ -33,6 +33,24 @@ const BOOK_SUBTITLE = 'مع حصن المؤمن';
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(320, SCREEN_WIDTH * 0.86);
 
+/**
+ * The next moment that falls on `weekday` (0 = Sunday) at the hour and minute of
+ * `time`. Today counts only if that time is still ahead; otherwise next week.
+ */
+function nextWeekdayAt(weekday, time) {
+  var now = moment();
+  var next = now.clone()
+    .day(Number(weekday))
+    .hours(time.getHours())
+    .minutes(time.getMinutes())
+    .seconds(0)
+    .milliseconds(0);
+  if (!next.isAfter(now)) {
+    next.add(1, 'week');
+  }
+  return next.toDate();
+}
+
 export default class PDFExample extends React.Component {
 
   constructor(props) {
@@ -91,39 +109,20 @@ export default class PDFExample extends React.Component {
   };
 
   handleDatePicked = async (date, days) => {
+    this.hideDateTimePicker();
+    await this.notif.ensurePermissions();
 
-    console.log("A date has been pickedssss: ", days);
-
-    var now = moment();
-    var nowPlusWeek = moment().add(1, 'week');
-    // Scheduling is asynchronous now, so collect the calls and refresh the
+    // Scheduling is asynchronous, so collect the calls and refresh the
     // index only once every reminder is actually registered.
     var pending = [];
 
     for (var i = 0, keys = Object.keys(days), ii = keys.length; i < ii; i++) {
-
-      if (days[keys[i]] == 1)
-      {
-        // console.log('key : ' + keys[i] + ' val : ' + days[keys[i]]);
-
-        var day = now.clone().weekday(keys[i])
-
-        // console.log(now);
-        // console.log(day.toDate());
-
-        if(now > day.toDate())
-          day = nowPlusWeek.clone().weekday(keys[i])
-
-        date.setMonth(day.toDate().getMonth(), day.toDate().getDate())
-        date.setSeconds(0);
-        pending.push(this.scheduleNewLovalNotif(date, keys[i]));
-        console.log('Schedule date : ', date);
+      if (days[keys[i]] == 1) {
+        pending.push(this.scheduleNewLovalNotif(nextWeekdayAt(keys[i], date), keys[i]));
       }
     }
     await Promise.all(pending);
     this.refreshContentMenu();
-
-    this.hideDateTimePicker();
   };
 
   createNewAlarm = async (alarmId, alarmTitle, pageNumber) => {
@@ -143,8 +142,7 @@ export default class PDFExample extends React.Component {
   {
     var id = this.state.alarmId + day;
     console.log('Schedule id : ', id);
-    // Clone the date: the caller reuses one Date object for every weekday.
-    return this.notif.scheduleNotif(id, this.state.alarmTitle+ "_"+day, this.state.pageNumber, new Date(date.getTime()));
+    return this.notif.scheduleNotif(id, this.state.alarmTitle, this.state.pageNumber, date);
   }
 
 
@@ -201,10 +199,16 @@ export default class PDFExample extends React.Component {
   }
 
   onNotif(notif) {
-    // Alert.alert(notif.title, `${notif.data.page}`);
-
-    this.onPageSet(notif.data.page);
-    this.setState({initialPage:notif.data.page})
+    // On a cold start this can run before the PDF view and drawer have
+    // mounted; `initialPage` alone then opens the book at the right page.
+    var page = notif.data.page;
+    this.setState({initialPage: page, currentPage: page});
+    if (this.pdf) {
+      this.pdf.setPage(page);
+    }
+    if (this._drawer) {
+      this.closeControlPanel();
+    }
   }
 
   clearSearch=()=>

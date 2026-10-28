@@ -23,6 +23,19 @@ export default class AlarmPicker extends Component<Props> {
         selectedDate:new Date(),
 
       }
+      componentDidUpdate(prevProps) {
+          // The dialog stays mounted, so start from the current time each time
+          // it opens instead of the time the app was launched.
+          if (this.props.isVisible && !prevProps.isVisible) {
+              const now = new Date();
+              this.setState({
+                  selectedHours: now.getHours(),
+                  selectedMinutes: now.getMinutes(),
+                  selectedDate: now,
+              });
+          }
+      }
+
       handleChange = (days) => {
           // `days` is mutated in place by the picker, so copy it to re-render.
           this.setState({days: {...days}});

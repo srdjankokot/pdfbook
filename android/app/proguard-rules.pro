@@ -8,3 +8,8 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+
+# WorkManager (used by notifee to deliver reminders) opens its Room database by
+# instantiating WorkDatabase_Impl reflectively. Its bundled rule keeps only the
+# class, and R8 full mode then strips the constructor, crashing on launch.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
