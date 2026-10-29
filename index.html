@@ -16,6 +16,7 @@
   }
   h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 4px; }
   h2 { font-size: 1.1rem; margin: 2.2rem 0 .6rem; color: #0c5239; }
+  h3 { font-size: 1rem; margin: 1.4rem 0 .4rem; color: #0c5239; }
   .sub { color: #6b7a75; margin: 0 0 6px; }
   .meta { color: #6b7a75; font-size: .875rem; margin: 0 0 32px; }
   .callout {
@@ -41,15 +42,16 @@
 <p class="sub">مقاليد السماوات والأرض مع حصن المؤمن — Android application</p>
 <p class="meta">
   Application ID: <code>com.maqalid.hisnalmumin</code><br>
-  Effective date: <span class="fill">16.09.2026.</span><br>
+  Effective date: <span class="fill">29.10.2026.</span><br>
   Published by: <span class="fill">Ninecodex</span>
 </p>
 
 <div class="callout">
-  <strong>Summary:</strong> this application does not collect, store, transmit or share any
-  personal data. It works entirely offline on your device. There are no user accounts, no
-  analytics, no advertising and no crash reporting, and the application sends no information
-  to us or to any third party.
+  <strong>Summary:</strong> this application does not collect, transmit or share any personal
+  data. It works entirely offline on your device. There are no user accounts, no analytics, no
+  advertising and no crash reporting, and the application sends no information to us or to any
+  third party. If you choose a reminder that follows a prayer time, your approximate location is
+  used on your device only, to work out the prayer times.
 </div>
 
 <h2>1. Information we collect</h2>
@@ -57,26 +59,44 @@
   None. We do not collect or receive any personal or sensitive user data. Specifically, the
   application does not collect your name, email address, phone number, contacts, location,
   device identifiers, advertising identifiers, photos, files, usage statistics or crash logs.
+  The approximate location described below is processed only on your device and is never sent
+  to us or to anyone else.
 </p>
 
 <h2>2. Information stored on your device</h2>
 <p>
-  The only information the application creates is the reminders you set yourself. For each
-  reminder, the following is saved locally on your device by the Android notification
-  scheduler:
+  The application saves only the following, locally on your device:
 </p>
 <ul>
-  <li>the time of day and the weekdays you selected;</li>
-  <li>the title of the topic the reminder belongs to and the page number it opens.</li>
+  <li>the reminders you set: the time of day or the prayer they follow, the weekdays, the title
+    of the topic and the page number it opens;</li>
+  <li>your reading preferences: the page you last read and the topics you marked as
+    favourites;</li>
+  <li>only if you choose a reminder that follows a prayer: your approximate location
+    (latitude and longitude, which Android limits to an accuracy of roughly 2 km), used to calculate
+    the prayer times for those reminders.</li>
 </ul>
 <p>
-  This data never leaves your device, is not accessible to us, and is deleted when you remove
-  the reminder in the application or uninstall the application.
+  This data never leaves your device and is not accessible to us. Reminders are deleted when
+  you remove them in the application; everything, including the stored location, is deleted
+  when you clear the application's data or uninstall it.
+</p>
+
+<h3>Approximate location</h3>
+<p>
+  The application asks for your approximate location only when you choose a reminder that
+  follows a prayer (for example "after Fajr"). It never asks for your precise location and
+  never tracks you in the background: it reads the location when you make that choice, and
+  when you open the application, to adjust the prayer times if you have travelled. Prayer times
+  are calculated on your device; no location is sent anywhere. You can refuse the permission
+  and use reminders at a fixed time instead, or withdraw it at any time in your device's
+  settings.
 </p>
 
 <h2>3. Permissions and why they are requested</h2>
 <table>
   <tr><th>Permission</th><th>Purpose</th></tr>
+  <tr><td><code>ACCESS_COARSE_LOCATION</code></td><td>Only if you choose a reminder that follows a prayer time: your approximate location, used on your device to calculate prayer times. See "Approximate location" above.</td></tr>
   <tr><td><code>POST_NOTIFICATIONS</code></td><td>Required by Android 13 and later to display the reminders you set.</td></tr>
   <tr><td><code>SCHEDULE_EXACT_ALARM</code></td><td>So a reminder appears at the minute you chose rather than whenever the system next batches background work.</td></tr>
   <tr><td><code>RECEIVE_BOOT_COMPLETED</code></td><td>So your reminders still work after the device is restarted.</td></tr>
@@ -85,15 +105,18 @@
   <tr><td><code>ACCESS_NOTIFICATION_POLICY</code> and other normal-level permissions</td><td>Declared by the notification component so reminders respect your device's Do Not Disturb settings. These do not grant access to any personal data.</td></tr>
 </table>
 <p>
-  The application does not request access to your files, camera, microphone, contacts or
-  location.
+  The application does not request access to your files, camera, microphone or contacts, and
+  never requests your precise location.
 </p>
 
 <h2>4. Third-party components</h2>
 <p>
   The application is built with React Native and uses open-source components to display the
-  PDF book and to schedule local reminders. These components run entirely on your device and
-  are not used to transmit data. The application contains no advertising networks, no
+  PDF book, to schedule local reminders, to store your preferences, to calculate prayer times
+  and to read your approximate location from Android. These components run entirely on your
+  device and are not used to transmit data. Your approximate location is provided by your
+  device's location service (on most devices, Google Location Services); how that service
+  determines the location is governed by the policy of your device or its provider. The application contains no advertising networks, no
   analytics software development kits and no social network integrations.
 </p>
 
@@ -111,8 +134,8 @@
 <h2>7. Data retention and deletion</h2>
 <p>
   As no data is collected or transmitted, there is nothing for us to retain or delete. The
-  reminders stored locally on your device are removed when you delete them in the application
-  or uninstall it.
+  data stored locally on your device is described in section 2; it is removed when you clear
+  the application's data or uninstall it.
 </p>
 
 <h2>8. Changes to this policy</h2>
