@@ -28,6 +28,8 @@ build/
 .gradle
 local.properties
 *.iml
+# CMake/NDK build output, regenerated on every native build
+.cxx/
 
 # node.js
 #
