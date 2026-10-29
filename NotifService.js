@@ -132,11 +132,17 @@ export default class NotifService {
   }
 
   /**
-   * Re-registers saved reminders whose alarm type no longer matches the
-   * exact-alarm permission: exact alarms once it is granted, WorkManager while
-   * it is not. Reminders saved by earlier versions asked for an exact alarm
-   * regardless, so without the permission notifee silently never fires them;
-   * they also get the current channel, title, text and icon on the way through.
+   * Re-registers every saved reminder, each time the app opens or returns.
+   *
+   * A force stop (which some vendors apply when an app is swiped away) wipes
+   * the app's alarms while notifee still lists the reminders as scheduled,
+   * and notifee only restores them after a reboot, so they would silently
+   * never fire. Re-creating a trigger under the same id simply replaces it.
+   *
+   * On the way through each reminder also gets the alarm type the exact-alarm
+   * permission allows (exact when granted, WorkManager when not) and the
+   * current channel, title, text and icon, which repairs reminders saved by
+   * earlier versions.
    */
   async syncTriggers() {
     if (Platform.OS !== 'android') {
@@ -148,12 +154,7 @@ export default class NotifService {
       const entries = await notifee.getTriggerNotifications();
       await Promise.all(
         entries
-          .filter(({notification, trigger}) =>
-            trigger &&
-            (exact !== !!trigger.alarmManager ||
-              (notification.android || {}).channelId !== channelId ||
-              LEGACY_TITLE_SUFFIX.test(notification.title || '')),
-          )
+          .filter(({trigger}) => trigger)
           .map(({notification, trigger}) => {
             const {alarmManager, ...rest} = trigger;
             return notifee.createTriggerNotification(

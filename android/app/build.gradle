@@ -90,8 +90,8 @@ android {
         applicationId "com.maqalid.hisnalmumin"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
-        versionName "1.0.2"
+        versionCode 6
+        versionName "1.1.0"
         // All four ABIs stay in (see reactNativeArchitectures in
         // gradle.properties): the App Bundle splits per device, so a phone only
         // ever downloads its own. Build a slim APK with

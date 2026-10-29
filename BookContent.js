@@ -11,12 +11,13 @@ import { colors, radius, spacing } from './theme';
 type Props = {};
 
 /**
- * One row of the table of contents: topic title, its page number and the
- * alarm toggle. Laid out right-to-left to match the Arabic content.
+ * One row of the table of contents: favourite star, topic title, its page
+ * number and the alarm toggle. Laid out right-to-left to match the Arabic
+ * content.
  */
 export default class AKButton extends Component<Props> {
     render() {
-        const { name, page, isScheduled, alarmTime } = this.props;
+        const { name, page, isScheduled, alarmTime, isFavorite } = this.props;
 
         return (
             <TouchableOpacity
@@ -26,8 +27,18 @@ export default class AKButton extends Component<Props> {
                     this.props.onPress();
                 }}>
                 {/* Reversed row: first child lands on the right, so the order
-                    below is title → page → alarm, matching the column headers. */}
+                    below is star → title → page → alarm. */}
                 <View style={styles.row}>
+                    <TouchableOpacity
+                        style={styles.starZone}
+                        activeOpacity={0.6}
+                        hitSlop={{top: 10, bottom: 10, left: 6, right: 6}}
+                        onPress={this.props.onFavoritePress}>
+                        <Text style={[styles.star, isFavorite && styles.starOn]}>
+                            {isFavorite ? '★' : '☆'}
+                        </Text>
+                    </TouchableOpacity>
+
                     <Text style={styles.title}>{name}</Text>
 
                     {page != null && (
@@ -81,13 +92,25 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: colors.primary,
     },
+    starZone: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 24,
+    },
+    star: {
+        fontSize: 18,
+        color: colors.border,
+    },
+    starOn: {
+        color: colors.accent,
+    },
     title: {
         flex: 1,
         fontSize: 15,
         lineHeight: 22,
         color: colors.text,
         textAlign: 'right',
-        marginHorizontal: spacing.md,
+        marginHorizontal: spacing.sm,
     },
     alarmZone: {
         alignItems: 'center',

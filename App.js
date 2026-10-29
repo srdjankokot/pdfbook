@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import {StyleSheet, Dimensions, StatusBar, View, TouchableOpacity, TextInput, FlatList, Alert, Text, Switch} from 'react-native';
+import {StyleSheet, Dimensions, StatusBar, View, TouchableOpacity, TextInput, SectionList, Alert, Text, Switch} from 'react-native';
 import Pdf from 'react-native-pdf';
 
 import BookContent from './BookContent'
@@ -20,6 +20,8 @@ import BookContentsShort from "./book_content_short.json"
 import NotifService from './NotifService';
 
 import AlarmPicker from './TimePicker'
+import DailyReminders from './DailyReminders';
+import {loadJSON, saveJSON} from './storage';
 import moment from 'moment';
 
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -29,6 +31,18 @@ import {pageLabel, printedPage, timeLabel, toArabicDigits} from './format';
 
 const BOOK_TITLE = 'مقاليد السماوات والأرض';
 const BOOK_SUBTITLE = 'مع حصن المؤمن';
+
+// The topics behind the daily card; they are ordinary topics, so their
+// reminders also show as a tick in the list below it.
+const DAILY_REMINDERS = [
+  {id: 2, label: 'أذكار الصباح', icon: '☀', hours: 5, minutes: 30},
+  {id: 53, label: 'أذكار المساء', icon: '☾', hours: 17, minutes: 0},
+];
+const ALL_DAYS = ['0', '1', '2', '3', '4', '5', '6'];
+
+function topicById(id) {
+  return BookContents.find((item) => item.id === id);
+}
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(320, SCREEN_WIDTH * 0.86);
@@ -61,6 +75,39 @@ export default class PDFExample extends React.Component {
     this.refreshContentMenu();
   }
 
+  async componentDidMount() {
+    const [lastPage, favorites, dailyTimes, onboarded] = await Promise.all([
+      loadJSON('lastPage', 1),
+      loadJSON('favorites', []),
+      loadJSON('dailyTimes', {}),
+      loadJSON('onboarded', false),
+    ]);
+    this.savedPage = lastPage;
+    this.setState({favorites, dailyTimes});
+    this.restoreLastPage();
+
+    // Open the index once on first launch so the daily reminder card is seen.
+    if (!onboarded) {
+      saveJSON('onboarded', true);
+      setTimeout(() => this._drawer && this.openControlPanel(), 800);
+    }
+  }
+
+  /**
+   * Reopens the book where the reader left off, once both the saved page and
+   * the PDF are ready. A tapped reminder already chose the page, so it wins.
+   */
+  restoreLastPage() {
+    if (this.pageRestored || this.savedPage === undefined || !this.pdfLoaded) {
+      return;
+    }
+    this.pageRestored = true;
+    if (!this.openedFromNotif && this.savedPage > 1) {
+      this.pdf.setPage(this.savedPage);
+      this.setState({currentPage: this.savedPage});
+    }
+  }
+
   scheduledLocalNotifications(scheduledLocalNotifications) {
     if (scheduledLocalNotifications != null) {
       this.setState({ scheduleNotif: scheduledLocalNotifications });
@@ -75,7 +122,7 @@ export default class PDFExample extends React.Component {
 
   refreshContentMenu = () => {
     this.notif.removeAllDeliveredNotification();
-    this.notif.getScheduledLocalNotifications(this.scheduledLocalNotifications.bind(this));
+    return this.notif.getScheduledLocalNotifications(this.scheduledLocalNotifications.bind(this));
   }
 
 
@@ -97,6 +144,11 @@ export default class PDFExample extends React.Component {
     bookContent: BookContents,
     currentPage: 1,
     totalPages: 0,
+    favorites: [],
+    // {topicId: {hours, minutes}} chosen on the daily card.
+    dailyTimes: {},
+    // {topicId: bool} shown on the daily switches until scheduling finishes.
+    dailyPending: {},
   }
 
 
@@ -112,18 +164,23 @@ export default class PDFExample extends React.Component {
     this.hideDateTimePicker();
     await this.notif.ensurePermissions();
 
-    // Scheduling is asynchronous, so collect the calls and refresh the
-    // index only once every reminder is actually registered.
-    var pending = [];
-
-    for (var i = 0, keys = Object.keys(days), ii = keys.length; i < ii; i++) {
-      if (days[keys[i]] == 1) {
-        pending.push(this.scheduleNewLovalNotif(nextWeekdayAt(keys[i], date), keys[i]));
-      }
-    }
-    await Promise.all(pending);
+    const topic = {id: this.state.alarmId, title: this.state.alarmTitle, page: this.state.pageNumber};
+    const chosenDays = Object.keys(days).filter((day) => days[day] == 1);
+    await this.scheduleTopic(topic, date, chosenDays);
     this.refreshContentMenu();
   };
+
+  /**
+   * One weekly reminder per chosen weekday; its id is the topic id with the
+   * weekday appended (see alarmsForContentId).
+   */
+  scheduleTopic = (topic, time, days) => {
+    return Promise.all(
+      days.map((day) =>
+        this.notif.scheduleNotif(String(topic.id) + day, topic.title, topic.page, nextWeekdayAt(day, time)),
+      ),
+    );
+  }
 
   createNewAlarm = async (alarmId, alarmTitle, pageNumber) => {
     //Schedule Future Alarm
@@ -136,13 +193,6 @@ export default class PDFExample extends React.Component {
       this.showDateTimePicker();
       // this.notif.scheduleNotif(alarmId, alarmTitle, pageNumber);
     }
-  }
-
-  scheduleNewLovalNotif= (date, day) =>
-  {
-    var id = this.state.alarmId + day;
-    console.log('Schedule id : ', id);
-    return this.notif.scheduleNotif(id, this.state.alarmTitle, this.state.pageNumber, date);
   }
 
 
@@ -182,6 +232,64 @@ export default class PDFExample extends React.Component {
     return timeLabel(date.getHours(), date.getMinutes());
   }
 
+  /** The time a daily row shows: its live reminder, else the saved or default time. */
+  dailyTime(row) {
+    const alarm = this.alarmsForContentId(row.id)[0];
+    const date = alarm && (alarm.date instanceof Date ? alarm.date : new Date(alarm.date));
+    if (date && !isNaN(date.getTime())) {
+      return {hours: date.getHours(), minutes: date.getMinutes()};
+    }
+    return this.state.dailyTimes[row.id] || {hours: row.hours, minutes: row.minutes};
+  }
+
+  dailyRows() {
+    return DAILY_REMINDERS.map((row) => {
+      const pending = this.state.dailyPending[row.id];
+      return {
+        ...row,
+        ...this.dailyTime(row),
+        enabled: pending !== undefined ? pending : this.isScheduled(row.id),
+      };
+    });
+  }
+
+  /** Replaces a daily topic's reminders with one for every day, or removes them. */
+  setDailyReminder = async (id, enabled, hours, minutes) => {
+    this.setState({dailyPending: {...this.state.dailyPending, [id]: enabled}});
+    await this.removeAlarmForContentId(id);
+    if (enabled) {
+      await this.notif.ensurePermissions();
+      const time = new Date();
+      time.setHours(hours, minutes, 0, 0);
+      await this.scheduleTopic(topicById(id), time, ALL_DAYS);
+    }
+    await this.refreshContentMenu();
+    const {[id]: _done, ...stillPending} = this.state.dailyPending;
+    this.setState({dailyPending: stillPending});
+  }
+
+  onDailyToggle = (id, enabled) => {
+    const row = DAILY_REMINDERS.find((r) => r.id === id);
+    const {hours, minutes} = this.dailyTime(row);
+    this.setDailyReminder(id, enabled, hours, minutes);
+  }
+
+  onDailyTimeChange = (id, hours, minutes) => {
+    const dailyTimes = {...this.state.dailyTimes, [id]: {hours, minutes}};
+    this.setState({dailyTimes});
+    saveJSON('dailyTimes', dailyTimes);
+    // Picking a time is a clear sign the reminder is wanted, so it also turns it on.
+    this.setDailyReminder(id, true, hours, minutes);
+  }
+
+  toggleFavorite = (id) => {
+    const favorites = this.state.favorites.includes(id)
+      ? this.state.favorites.filter((f) => f !== id)
+      : [...this.state.favorites, id];
+    this.setState({favorites});
+    saveJSON('favorites', favorites);
+  }
+
   closeControlPanel = () => {
     this._drawer.closeDrawer()
   };
@@ -202,6 +310,7 @@ export default class PDFExample extends React.Component {
     // On a cold start this can run before the PDF view and drawer have
     // mounted; `initialPage` alone then opens the book at the right page.
     var page = notif.data.page;
+    this.openedFromNotif = true;
     this.setState({initialPage: page, currentPage: page});
     if (this.pdf) {
       this.pdf.setPage(page);
@@ -238,6 +347,24 @@ export default class PDFExample extends React.Component {
       return content;
     }
     return content.filter((item) => item.title.toLowerCase().indexOf(needle) > -1);
+  }
+
+  /** Favourites first while browsing; a single plain list while searching. */
+  drawerSections(items) {
+    if (items.length === 0) {
+      return [];
+    }
+    const favorites = this.state.favorites
+      .map((id) => items.find((item) => item.id === id))
+      .filter(Boolean);
+    if (this.state.searchText !== '' || favorites.length === 0) {
+      return [{key: 'all', data: items}];
+    }
+    return [
+      // Copies with their own keys, since the same topics appear again below.
+      {key: 'favorites', title: 'المفضلة', data: favorites.map((item) => ({...item, key: 'fav-' + item.id}))},
+      {key: 'all', title: 'كل المواضيع', data: items},
+    ];
   }
 
   renderSearchIcon() {
@@ -280,20 +407,36 @@ export default class PDFExample extends React.Component {
           )}
         </View>
 
-        <View style={styles.listHeader}>
-          <Text style={styles.listHeaderTopic}>الموضوع</Text>
-          <Text style={styles.listHeaderAlarm}>المنبه</Text>
-        </View>
-
-        <FlatList
-          data={items}
+        <SectionList
+          sections={this.drawerSections(items)}
           keyboardShouldPersistTaps={'handled'}
+          stickySectionHeadersEnabled={false}
+          ListHeaderComponent={
+            <View>
+              {this.state.searchText === '' && (
+                <DailyReminders
+                  rows={this.dailyRows()}
+                  onToggle={this.onDailyToggle}
+                  onTimeChange={this.onDailyTimeChange}
+                />
+              )}
+              <View style={styles.listHeader}>
+                <Text style={styles.listHeaderTopic}>الموضوع</Text>
+                <Text style={styles.listHeaderAlarm}>المنبه</Text>
+              </View>
+            </View>
+          }
+          renderSectionHeader={({section}) =>
+            section.title ? <Text style={styles.sectionHeader}>{section.title}</Text> : null
+          }
           renderItem={({ item }) => (
             <BookContent
               name={item.title}
               page={pageLabel(item.page)}
               isScheduled={this.isScheduled(item.id)}
               alarmTime={this.alarmTimeForContentId(item.id)}
+              isFavorite={this.state.favorites.includes(item.id)}
+              onFavoritePress={() => this.toggleFavorite(item.id)}
               onPress={() => this.onPageSet(item.page)}
               onButtonPress={() => this.createNewAlarm(item.id, item.title, item.page)}
             />
@@ -302,7 +445,7 @@ export default class PDFExample extends React.Component {
           ListEmptyComponent={() => (
             <Text style={styles.emptyText}>لا توجد نتائج</Text>
           )}
-          keyExtractor={item => item.id}
+          keyExtractor={(item, index) => item.key || String(item.id)}
         />
 
 {/* changing book version */}
@@ -396,10 +539,17 @@ export default class PDFExample extends React.Component {
             onLoadComplete={(numberOfPages, filePath) => {
               console.log(`number of pages: ${numberOfPages}`);
               this.setState({totalPages: numberOfPages});
+              this.pdfLoaded = true;
+              this.restoreLastPage();
             }}
             onPageChanged={(page, numberOfPages) => {
               console.log(`current page: ${page}`);
               this.setState({currentPage: page});
+              // The PDF reports page 1 as it loads; saving that before the
+              // saved page is restored would lose it.
+              if (this.pageRestored) {
+                saveJSON('lastPage', page);
+              }
             }}
             onError={(error) => {
               console.log(error);
@@ -594,6 +744,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textMuted,
+  },
+  sectionHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    textAlign: 'right',
+    backgroundColor: colors.surface,
   },
   separator: {
     height: 1,
