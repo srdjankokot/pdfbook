@@ -11,6 +11,9 @@
     <!-- Reminders must fire at the minute the user picked, not whenever the
          system batches work. Auto-granted on Android 13, user-toggleable on 14+. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Approximate location only, to work out prayer times for reminders that
+         follow a prayer. Asked for when the reader picks that option. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- react-native-blob-util (a dependency of react-native-pdf) declares these
          for its download-manager features. The book is read from the bundled

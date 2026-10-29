@@ -16,8 +16,14 @@ export async function loadJSON(key, fallback) {
   }
 }
 
+// Writes run one after another: two quick saves of the same key could
+// otherwise land out of order and leave the older value stored.
+let writes = Promise.resolve();
+
 export function saveJSON(key, value) {
-  return storage
-    .setItem(key, JSON.stringify(value))
+  const json = JSON.stringify(value);
+  writes = writes
+    .then(() => storage.setItem(key, json))
     .catch((e) => console.log('saveJSON failed', key, e));
+  return writes;
 }

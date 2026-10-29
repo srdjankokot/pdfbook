@@ -17,11 +17,22 @@ import Drawer from './Drawer';
 import BookContents from "./book_content.json"
 import BookContentsShort from "./book_content_short.json"
 
-import NotifService from './NotifService';
+import NotifService, {cancelTopicReminders, skipWeeklyReminder, topicOf} from './NotifService';
 
 import AlarmPicker from './TimePicker'
 import DailyReminders from './DailyReminders';
+import Reminders from './Reminders';
 import {loadJSON, saveJSON} from './storage';
+import {
+  DEFAULT_OFFSET,
+  prayerLabel,
+  refreshLocationSilently,
+  requestLocation,
+  schedulePrayerReminders,
+  skipPrayerReminder,
+  topUpPrayerReminders,
+  upcomingTimes,
+} from './prayer';
 import moment from 'moment';
 
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -33,12 +44,23 @@ const BOOK_TITLE = 'مقاليد السماوات والأرض';
 const BOOK_SUBTITLE = 'مع حصن المؤمن';
 
 // The topics behind the daily card; they are ordinary topics, so their
-// reminders also show as a tick in the list below it.
+// reminders also show as a tick in the list below it. `prayer` is the prayer
+// a reminder can follow instead of a fixed time.
 const DAILY_REMINDERS = [
-  {id: 2, label: 'أذكار الصباح', icon: '☀', hours: 5, minutes: 30},
-  {id: 53, label: 'أذكار المساء', icon: '☾', hours: 17, minutes: 0},
+  {id: 2, label: 'أذكار الصباح', icon: '☀', hours: 5, minutes: 30, prayer: 'fajr'},
+  {id: 53, label: 'أذكار المساء', icon: '☾', hours: 17, minutes: 0, prayer: 'asr'},
 ];
+const DAILY_IDS = DAILY_REMINDERS.map((row) => row.id);
 const ALL_DAYS = ['0', '1', '2', '3', '4', '5', '6'];
+const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+/** "اليوم ٠٥:٣٠", "غداً ٠٥:٣٠", or the weekday for later dates. */
+function whenLabel(date) {
+  var today = moment().startOf('day');
+  var days = moment(date).startOf('day').diff(today, 'days');
+  var day = days === 0 ? 'اليوم' : days === 1 ? 'غداً' : DAY_NAMES[date.getDay()];
+  return day + ' ' + timeLabel(date.getHours(), date.getMinutes());
+}
 
 function topicById(id) {
   return BookContents.find((item) => item.id === id);
@@ -71,20 +93,32 @@ export default class PDFExample extends React.Component {
     super(props);
     this.notif = new NotifService(
       this.onNotif.bind(this),
+      () => this.topUpPrayer(),
     );
     this.refreshContentMenu();
   }
 
   async componentDidMount() {
-    const [lastPage, favorites, dailyTimes, onboarded] = await Promise.all([
+    const [lastPage, favorites, dailyTimes, dailyModes, location, onboarded] = await Promise.all([
       loadJSON('lastPage', 1),
       loadJSON('favorites', []),
       loadJSON('dailyTimes', {}),
+      loadJSON('dailyModes', {}),
+      loadJSON('location', null),
       loadJSON('onboarded', false),
     ]);
     this.savedPage = lastPage;
-    this.setState({favorites, dailyTimes});
+    this.modes = dailyModes;
+    this.setState({favorites, dailyTimes, dailyModes, location});
     this.restoreLastPage();
+
+    // Follow the reader if they travelled, and keep the prayer-time reminders
+    // scheduled the full window ahead.
+    const moved = await refreshLocationSilently();
+    if (moved) {
+      this.setState({location: moved});
+    }
+    this.topUpPrayer();
 
     // Open the index once on first launch so the daily reminder card is seen.
     if (!onboarded) {
@@ -106,6 +140,11 @@ export default class PDFExample extends React.Component {
       this.pdf.setPage(this.savedPage);
       this.setState({currentPage: this.savedPage});
     }
+  }
+
+  topUpPrayer = async () => {
+    await topUpPrayerReminders();
+    this.refreshContentMenu();
   }
 
   scheduledLocalNotifications(scheduledLocalNotifications) {
@@ -149,6 +188,11 @@ export default class PDFExample extends React.Component {
     dailyTimes: {},
     // {topicId: bool} shown on the daily switches until scheduling finishes.
     dailyPending: {},
+    // {topicId: {mode: 'fixed'|'prayer', offset, prayer, enabled}}; see dailyMode.
+    dailyModes: {},
+    // {latitude, longitude} used for prayer times, or null until asked.
+    location: null,
+    remindersVisible: false,
   }
 
 
@@ -166,6 +210,10 @@ export default class PDFExample extends React.Component {
 
     const topic = {id: this.state.alarmId, title: this.state.alarmTitle, page: this.state.pageNumber};
     const chosenDays = Object.keys(days).filter((day) => days[day] == 1);
+    if (DAILY_IDS.includes(topic.id)) {
+      // Set from the list, so it is a fixed time now, not a prayer time.
+      this.saveDailyMode(topic.id, {mode: 'fixed', enabled: true});
+    }
     await this.scheduleTopic(topic, date, chosenDays);
     this.refreshContentMenu();
   };
@@ -185,8 +233,7 @@ export default class PDFExample extends React.Component {
   createNewAlarm = async (alarmId, alarmTitle, pageNumber) => {
     //Schedule Future Alarm
     if (this.isScheduled(alarmId)) {
-      await this.removeAlarmForContentId(alarmId);
-      this.refreshContentMenu();
+      await this.cancelTopic(alarmId);
     }
     else {
       this.setState({alarmId:alarmId, alarmTitle:alarmTitle, pageNumber:pageNumber});
@@ -196,72 +243,169 @@ export default class PDFExample extends React.Component {
   }
 
 
-  removeAlarmForContentId=(contentId)=>{
-    return Promise.all(
-      this.alarmsForContentId(contentId).map((data) =>
-        this.notif.cancelLocalNotifications(data.id)
-      )
-    );
+  /** Removes every reminder of a topic, for good. */
+  cancelTopic = async (contentId) => {
+    if (DAILY_IDS.includes(contentId)) {
+      // Otherwise the prayer-time top-up would bring it back.
+      this.saveDailyMode(contentId, {enabled: false});
+    }
+    await this.removeAlarmForContentId(contentId);
+    await this.refreshContentMenu();
   }
 
-  /**
-   * Every scheduled notification belongs to one topic; its id is the topic id
-   * with the weekday appended, so strip that last character to group them.
-   */
+  /** Skips only the next occurrence; later ones stay as they are. */
+  skipNext = async (item) => {
+    if (item.nextWeekly) {
+      await skipWeeklyReminder(item.nextId);
+    } else {
+      await skipPrayerReminder(item.nextId);
+    }
+    await this.refreshContentMenu();
+  }
+
+  /** One entry per topic with reminders, soonest first, for the reminder list. */
+  reminderItems() {
+    var byTopic = {};
+    this.state.scheduleNotif.forEach((alarm) => {
+      var date = alarm.date instanceof Date ? alarm.date : new Date(alarm.date);
+      if (!isNaN(date.getTime())) {
+        var topic = topicOf(alarm);
+        (byTopic[topic] = byTopic[topic] || []).push({...alarm, date});
+      }
+    });
+    return Object.keys(byTopic)
+      .map((topicId) => {
+        var alarms = byTopic[topicId].sort((a, b) => a.date - b.date);
+        var next = alarms[0];
+        var topic = topicById(Number(topicId)) || {title: next.title, page: Number(next.data && next.data.page)};
+        return {
+          topicId: Number(topicId),
+          title: topic.title,
+          page: topic.page,
+          date: next.date,
+          next: whenLabel(next.date),
+          schedule: this.scheduleLabel(Number(topicId), alarms),
+          nextId: next.id,
+          nextWeekly: next.weekly,
+        };
+      })
+      .sort((a, b) => a.date - b.date);
+  }
+
+  /** "كل يوم · ٠٥:٣٠", "السبت، الأحد · ٢١:٠٠" or "كل يوم · بعد العصر بـ ١٠ دقائق". */
+  scheduleLabel(topicId, alarms) {
+    if (!alarms[0].weekly && DAILY_IDS.includes(topicId)) {
+      var {prayer, offset} = this.dailyMode(topicId);
+      return 'كل يوم · ' + prayerLabel(prayer, offset);
+    }
+    // In the order they come up, starting with the next one.
+    var weekdays = [...new Set(alarms.map((alarm) => alarm.date.getDay()))];
+    var days = weekdays.length === 7 ? 'كل يوم' : weekdays.map((day) => DAY_NAMES[day]).join('، ');
+    return days + ' · ' + timeLabel(alarms[0].date.getHours(), alarms[0].date.getMinutes());
+  }
+
+  openReminder = (item) => {
+    this.setState({remindersVisible: false});
+    this.onPageSet(item.page);
+  }
+
+  // Asks notifee rather than the list on screen, which can lag behind.
+  removeAlarmForContentId=(contentId)=>{
+    return cancelTopicReminders(contentId);
+  }
+
+  /** Every scheduled notification belongs to one topic (see topicOf). */
   alarmsForContentId = (contentId) => {
-    return this.state.scheduleNotif.filter((data) => {
-      var id = String(data.id).substring(0, String(data.id).length - 1)
-      return id == contentId;
-    })
+    return this.state.scheduleNotif.filter((data) => topicOf(data) === String(contentId));
+  }
+
+  /** When a topic's next reminder fires, or null. */
+  nextAlarmDate(contentId) {
+    var dates = this.alarmsForContentId(contentId)
+      .map((alarm) => (alarm.date instanceof Date ? alarm.date : new Date(alarm.date)))
+      .filter((date) => !isNaN(date.getTime()))
+      .sort((a, b) => a - b);
+    return dates.length > 0 ? dates[0] : null;
   }
 
   isScheduled = (contentId) => {
     return this.alarmsForContentId(contentId).length > 0;
   }
 
-  /** "07:30" for the first alarm of a topic, or null if the date is unusable. */
+  /** "07:30" for the next alarm of a topic, or null if it has none. */
   alarmTimeForContentId = (contentId) => {
-    var alarms = this.alarmsForContentId(contentId);
-    if (alarms.length === 0) {
-      return null;
-    }
-    var date = alarms[0].date instanceof Date ? alarms[0].date : new Date(alarms[0].date);
-    if (isNaN(date.getTime())) {
-      return null;
-    }
-    return timeLabel(date.getHours(), date.getMinutes());
+    var date = this.nextAlarmDate(contentId);
+    return date ? timeLabel(date.getHours(), date.getMinutes()) : null;
   }
 
-  /** The time a daily row shows: its live reminder, else the saved or default time. */
+  /** A daily row's mode, with the defaults filled in. */
+  dailyMode(id) {
+    const row = DAILY_REMINDERS.find((r) => r.id === id);
+    const saved = (this.modes || this.state.dailyModes)[id];
+    return {mode: 'fixed', offset: DEFAULT_OFFSET, prayer: row.prayer, ...saved};
+  }
+
+  saveDailyMode(id, changes) {
+    // Kept on the instance as well: setState is asynchronous, and the save that
+    // follows in setDailyReminder must build on this one.
+    const dailyModes = {...(this.modes || this.state.dailyModes), [id]: {...this.dailyMode(id), ...changes}};
+    this.modes = dailyModes;
+    this.setState({dailyModes});
+    saveJSON('dailyModes', dailyModes);
+    return dailyModes[id];
+  }
+
+  /**
+   * The time a daily row shows: its next reminder, else what it would be if
+   * switched on (the next prayer time, or the saved or default clock time).
+   */
   dailyTime(row) {
-    const alarm = this.alarmsForContentId(row.id)[0];
-    const date = alarm && (alarm.date instanceof Date ? alarm.date : new Date(alarm.date));
-    if (date && !isNaN(date.getTime())) {
+    const date = this.nextAlarmDate(row.id) || this.nextPrayerTime(row.id);
+    if (date) {
       return {hours: date.getHours(), minutes: date.getMinutes()};
     }
     return this.state.dailyTimes[row.id] || {hours: row.hours, minutes: row.minutes};
   }
 
+  nextPrayerTime(id) {
+    const {mode, prayer, offset} = this.dailyMode(id);
+    if (mode !== 'prayer' || !this.state.location) {
+      return null;
+    }
+    return upcomingTimes(this.state.location, prayer, offset, 1)[0] || null;
+  }
+
   dailyRows() {
     return DAILY_REMINDERS.map((row) => {
       const pending = this.state.dailyPending[row.id];
+      const {mode, offset} = this.dailyMode(row.id);
       return {
         ...row,
         ...this.dailyTime(row),
+        mode,
+        offset,
         enabled: pending !== undefined ? pending : this.isScheduled(row.id),
       };
     });
   }
 
-  /** Replaces a daily topic's reminders with one for every day, or removes them. */
+  /**
+   * Replaces a daily topic's reminders, or removes them: every day at a fixed
+   * time, or every day after its prayer.
+   */
   setDailyReminder = async (id, enabled, hours, minutes) => {
     this.setState({dailyPending: {...this.state.dailyPending, [id]: enabled}});
+    const setting = this.saveDailyMode(id, {enabled});
     await this.removeAlarmForContentId(id);
     if (enabled) {
       await this.notif.ensurePermissions();
-      const time = new Date();
-      time.setHours(hours, minutes, 0, 0);
-      await this.scheduleTopic(topicById(id), time, ALL_DAYS);
+      if (setting.mode === 'prayer' && this.state.location) {
+        await schedulePrayerReminders(id, setting.prayer, setting.offset, this.state.location);
+      } else {
+        const time = new Date();
+        time.setHours(hours, minutes, 0, 0);
+        await this.scheduleTopic(topicById(id), time, ALL_DAYS);
+      }
     }
     await this.refreshContentMenu();
     const {[id]: _done, ...stillPending} = this.state.dailyPending;
@@ -270,14 +414,41 @@ export default class PDFExample extends React.Component {
 
   onDailyToggle = (id, enabled) => {
     const row = DAILY_REMINDERS.find((r) => r.id === id);
-    const {hours, minutes} = this.dailyTime(row);
+    const {hours, minutes} = this.state.dailyTimes[id] || row;
     this.setDailyReminder(id, enabled, hours, minutes);
+  }
+
+  /** Switches a daily row between a fixed time and a time after its prayer. */
+  onDailyModeChange = async (id, mode, offset) => {
+    if (mode === 'prayer' && !this.state.location) {
+      // Finding the location can take a few seconds; show the switch on meanwhile.
+      this.setState({dailyPending: {...this.state.dailyPending, [id]: true}});
+      const {coords, error} = await requestLocation();
+      if (error) {
+        const {[id]: _failed, ...stillPending} = this.state.dailyPending;
+        this.setState({dailyPending: stillPending});
+        Alert.alert(
+          'تعذر تحديد الموقع',
+          error === 'denied'
+            ? 'نحتاج إلى موقعك التقريبي لحساب أوقات الصلاة. يمكنك السماح بذلك من إعدادات التطبيق، أو استخدام وقت ثابت.'
+            : 'تعذر تحديد موقعك الآن. تأكد من تشغيل خدمة الموقع في الهاتف ثم حاول مرة أخرى، أو استخدم وقتاً ثابتاً.',
+        );
+        return;
+      }
+      this.setState({location: coords});
+    }
+    this.saveDailyMode(id, {mode, offset});
+    // Choosing when it comes is a clear sign the reminder is wanted.
+    const row = DAILY_REMINDERS.find((r) => r.id === id);
+    const {hours, minutes} = this.state.dailyTimes[id] || row;
+    this.setDailyReminder(id, true, hours, minutes);
   }
 
   onDailyTimeChange = (id, hours, minutes) => {
     const dailyTimes = {...this.state.dailyTimes, [id]: {hours, minutes}};
     this.setState({dailyTimes});
     saveJSON('dailyTimes', dailyTimes);
+    this.saveDailyMode(id, {mode: 'fixed'});
     // Picking a time is a clear sign the reminder is wanted, so it also turns it on.
     this.setDailyReminder(id, true, hours, minutes);
   }
@@ -418,8 +589,10 @@ export default class PDFExample extends React.Component {
                   rows={this.dailyRows()}
                   onToggle={this.onDailyToggle}
                   onTimeChange={this.onDailyTimeChange}
+                  onModeChange={this.onDailyModeChange}
                 />
               )}
+              {this.state.searchText === '' && this.renderRemindersLink()}
               <View style={styles.listHeader}>
                 <Text style={styles.listHeaderTopic}>الموضوع</Text>
                 <Text style={styles.listHeaderAlarm}>المنبه</Text>
@@ -470,8 +643,27 @@ export default class PDFExample extends React.Component {
     );
   };
 
+  /** Index row that opens the reminder list, with how many are set. */
+  renderRemindersLink() {
+    var items = this.reminderItems();
+    return (
+      <TouchableOpacity
+        style={styles.remindersLink}
+        activeOpacity={0.6}
+        onPress={() => this.setState({remindersVisible: true})}>
+        <Text style={styles.remindersLinkText}>
+          🔔  كل التذكيرات{items.length > 0 ? ' (' + toArabicDigits(items.length) + ')' : ''}
+        </Text>
+        <Text style={styles.remindersLinkNext}>
+          {items.length > 0 ? 'التالي: ' + items[0].next : 'لا توجد تذكيرات'}  ‹
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
   renderHeader() {
     const {currentPage, totalPages} = this.state;
+    const next = this.reminderItems()[0];
 
     return (
       <View style={styles.header}>
@@ -488,6 +680,17 @@ export default class PDFExample extends React.Component {
           <Text style={styles.headerTitle} numberOfLines={1}>{BOOK_TITLE}</Text>
           <Text style={styles.headerSubtitle} numberOfLines={1}>{BOOK_SUBTITLE}</Text>
         </View>
+
+        {next && (
+          <TouchableOpacity
+            style={styles.bellPill}
+            activeOpacity={0.7}
+            onPress={() => this.setState({remindersVisible: true})}>
+            <Text style={styles.pagePillText}>
+              🔔 {timeLabel(next.date.getHours(), next.date.getMinutes())}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {totalPages > 0 && (
           <View style={styles.pagePill}>
@@ -566,6 +769,15 @@ export default class PDFExample extends React.Component {
 
           />
 
+    <Reminders
+      visible={this.state.remindersVisible}
+      items={this.reminderItems()}
+      onClose={() => this.setState({remindersVisible: false})}
+      onOpen={this.openReminder}
+      onSkip={this.skipNext}
+      onCancel={(item) => this.cancelTopic(item.topicId)}
+    />
+
     <AlarmPicker
      isVisible={this.state.isDateTimePickerVisible}
      title={this.state.alarmTitle}
@@ -638,6 +850,14 @@ const styles = StyleSheet.create({
   },
   pagePill: {
     minWidth: 56,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+  },
+  bellPill: {
+    marginRight: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 5,
     borderRadius: radius.pill,
@@ -744,6 +964,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textMuted,
+  },
+  remindersLink: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  remindersLinkText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  remindersLinkNext: {
+    fontSize: 12,
+    color: colors.primary,
   },
   sectionHeader: {
     paddingHorizontal: spacing.lg,

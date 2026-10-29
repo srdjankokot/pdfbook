@@ -21,6 +21,10 @@ const NOTIFICATION_COLOR = '#136F4E';
 const LEGACY_TITLE_SUFFIX = /_\d$/;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
+function isWeekly(trigger) {
+  return trigger.repeatFrequency === RepeatFrequency.WEEKLY;
+}
+
 /** Moves a weekly timestamp forward by whole weeks until it is in the future. */
 function nextOccurrence(timestamp) {
   const now = Date.now();
@@ -28,6 +32,197 @@ function nextOccurrence(timestamp) {
     return timestamp;
   }
   return timestamp + Math.ceil((now - timestamp + 1) / WEEK_MS) * WEEK_MS;
+}
+
+/**
+ * Runs reminder changes one at a time. notifee reads and writes its list of
+ * reminders separately, so overlapping changes (a delete while every reminder
+ * is being re-registered, say) could bring back a deleted reminder or hand the
+ * screen a list from halfway through.
+ */
+let queue = Promise.resolve();
+
+function serial(task) {
+  const run = queue.then(task);
+  queue = run.catch(() => {});
+  return run;
+}
+
+/**
+ * Ids cancelled but possibly still listed: notifee confirms a cancel before
+ * its list catches up, so a read straight after would still show them, and a
+ * re-register would bring them back. Dropped once they are really gone.
+ */
+const cancelled = new Set();
+
+/** notifee's list of scheduled reminders, minus any just cancelled. */
+async function triggerNotifications() {
+  const entries = await notifee.getTriggerNotifications();
+  const listed = new Set(entries.map(({notification}) => notification.id));
+  for (const id of cancelled) {
+    if (!listed.has(id)) {
+      cancelled.delete(id);
+    }
+  }
+  return entries.filter(({notification}) => !cancelled.has(notification.id));
+}
+
+async function cancelNow(id) {
+  cancelled.add(String(id));
+  await notifee.cancelTriggerNotification(String(id));
+}
+
+let channelReady = null;
+
+/** Creates the reminder channel once; later calls share the same promise. */
+function ensureChannel() {
+  if (!channelReady) {
+    channelReady = (async () => {
+      try {
+        const channelId = await notifee.createChannel({
+          id: CHANNEL_ID,
+          name: CHANNEL_NAME,
+          importance: AndroidImportance.HIGH,
+          // notifee's default is silent, unlike Android's own.
+          sound: 'default',
+          vibration: true,
+        });
+        await notifee.deleteChannel(LEGACY_CHANNEL_ID);
+        return channelId;
+      } catch (e) {
+        console.log('createChannel failed', e);
+        return CHANNEL_ID;
+      }
+    })();
+  }
+  return channelReady;
+}
+
+/**
+ * Android 14+ denies SCHEDULE_EXACT_ALARM by default, and notifee then drops
+ * an exact trigger without reporting an error, so reminders must only ask for
+ * an exact alarm when the permission is actually granted.
+ */
+async function canScheduleExactAlarms() {
+  if (Platform.OS !== 'android') {
+    return true;
+  }
+  try {
+    const settings = await notifee.getNotificationSettings();
+    return settings.android.alarm === AndroidNotificationSetting.ENABLED;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * The topic a scheduled reminder belongs to. Prayer-time reminders carry it in
+ * their data; weekly ones are the topic id with the weekday appended.
+ */
+export function topicOf({id, data}) {
+  if (data && data.topic) {
+    return String(data.topic);
+  }
+  return String(id).substring(0, String(id).length - 1);
+}
+
+/**
+ * Schedules one reminder that opens `page` when tapped, either repeating every
+ * week (`weekly`) or once. Usable without the app on screen, so the background
+ * handler can top reminders up too.
+ */
+export function scheduleReminder(...args) {
+  return serial(() => scheduleReminderNow(...args));
+}
+
+async function scheduleReminderNow({id, topicId, title, page, timestamp, weekly}) {
+  const channelId = await ensureChannel();
+  const exact = await canScheduleExactAlarms();
+  cancelled.delete(String(id));
+  try {
+    await notifee.createTriggerNotification(
+      {
+        id: String(id),
+        title,
+        body: REMINDER_BODY,
+        // notifee only accepts string values in `data`.
+        data: {page: String(page), ...(topicId !== undefined && {topic: String(topicId)})},
+        android: {
+          channelId,
+          smallIcon: 'ic_notification',
+          color: NOTIFICATION_COLOR,
+          pressAction: {id: 'default', launchActivity: 'default'},
+          sound: 'default',
+        },
+        ios: {sound: 'default'},
+      },
+      {
+        type: TriggerType.TIMESTAMP,
+        timestamp,
+        ...(weekly && {repeatFrequency: RepeatFrequency.WEEKLY}),
+        // Without the permission notifee falls back to WorkManager, which
+        // may run a few minutes late but does deliver the reminder.
+        ...(exact && {
+          alarmManager: {type: AlarmType.SET_EXACT_AND_ALLOW_WHILE_IDLE},
+        }),
+      },
+    );
+  } catch (e) {
+    console.log('scheduleReminder failed', e);
+  }
+}
+
+/**
+ * Skips the next occurrence of a weekly reminder by moving it a week ahead;
+ * the ones after it keep their place.
+ */
+export function skipWeeklyReminder(...args) {
+  return serial(() => skipWeeklyReminderNow(...args));
+}
+
+async function skipWeeklyReminderNow(id) {
+  try {
+    const entries = await triggerNotifications();
+    const entry = entries.find(({notification}) => notification.id === String(id));
+    if (entry && isWeekly(entry.trigger)) {
+      await notifee.createTriggerNotification(entry.notification, {
+        ...entry.trigger,
+        timestamp: entry.trigger.timestamp + WEEK_MS,
+      });
+    }
+  } catch (e) {
+    console.log('skipWeeklyReminder failed', e);
+  }
+}
+
+export function cancelReminder(...args) {
+  return serial(() => cancelReminderNow(...args));
+}
+
+async function cancelReminderNow(id) {
+  try {
+    await cancelNow(id);
+  } catch (e) {
+    console.log('cancelReminder failed', e);
+  }
+}
+
+/** Removes every scheduled reminder of one topic. */
+export function cancelTopicReminders(...args) {
+  return serial(() => cancelTopicRemindersNow(...args));
+}
+
+async function cancelTopicRemindersNow(topicId) {
+  try {
+    const entries = await triggerNotifications();
+    await Promise.all(
+      entries
+        .filter(({notification}) => topicOf(notification) === String(topicId))
+        .map(({notification}) => cancelNow(notification.id)),
+    );
+  } catch (e) {
+    console.log('cancelTopicReminders failed', e);
+  }
 }
 
 // A reminder tapped while the app is in the background reaches notifee's
@@ -58,8 +253,13 @@ export async function handleBackgroundEvent({type, detail}) {
  * to open, and its id is the topic id with the weekday appended.
  */
 export default class NotifService {
-  constructor(onNotification) {
+  /**
+   * `onNotification` gets the page of a tapped reminder; `onDelivered` runs when
+   * a reminder is shown while the app is open.
+   */
+  constructor(onNotification, onDelivered) {
     this.onNotification = onNotification;
+    this.onDelivered = onDelivered;
     activeService = this;
     this.channelReady = this.setupChannel();
     this.attachHandlers();
@@ -74,21 +274,8 @@ export default class NotifService {
     });
   }
 
-  /**
-   * Android 14+ denies SCHEDULE_EXACT_ALARM by default, and notifee then drops
-   * an exact trigger without reporting an error, so reminders must only ask for
-   * an exact alarm when the permission is actually granted.
-   */
-  async canScheduleExactAlarms() {
-    if (Platform.OS !== 'android') {
-      return true;
-    }
-    try {
-      const settings = await notifee.getNotificationSettings();
-      return settings.android.alarm === AndroidNotificationSetting.ENABLED;
-    } catch (e) {
-      return false;
-    }
+  canScheduleExactAlarms() {
+    return canScheduleExactAlarms();
   }
 
   /**
@@ -139,23 +326,33 @@ export default class NotifService {
    * and notifee only restores them after a reboot, so they would silently
    * never fire. Re-creating a trigger under the same id simply replaces it.
    *
+   * One-off (prayer-time) reminders whose time passed while their alarm was
+   * gone are dropped instead; the prayer-time top-up schedules the days ahead.
+   *
    * On the way through each reminder also gets the alarm type the exact-alarm
    * permission allows (exact when granted, WorkManager when not) and the
    * current channel, title, text and icon, which repairs reminders saved by
    * earlier versions.
    */
-  async syncTriggers() {
+  syncTriggers() {
+    return serial(() => this.syncTriggersNow());
+  }
+
+  async syncTriggersNow() {
     if (Platform.OS !== 'android') {
       return;
     }
     const exact = await this.canScheduleExactAlarms();
     const channelId = await this.channelReady;
     try {
-      const entries = await notifee.getTriggerNotifications();
+      const entries = await triggerNotifications();
       await Promise.all(
         entries
           .filter(({trigger}) => trigger)
           .map(({notification, trigger}) => {
+            if (!isWeekly(trigger) && trigger.timestamp <= Date.now()) {
+              return cancelNow(notification.id);
+            }
             const {alarmManager, ...rest} = trigger;
             return notifee.createTriggerNotification(
               {
@@ -171,7 +368,7 @@ export default class NotifService {
               },
               {
                 ...rest,
-                timestamp: nextOccurrence(trigger.timestamp),
+                timestamp: isWeekly(trigger) ? nextOccurrence(trigger.timestamp) : trigger.timestamp,
                 ...(exact && {
                   alarmManager: {type: AlarmType.SET_EXACT_AND_ALLOW_WHILE_IDLE},
                 }),
@@ -187,20 +384,10 @@ export default class NotifService {
   async setupChannel() {
     try {
       await notifee.requestPermission();
-      const channelId = await notifee.createChannel({
-        id: CHANNEL_ID,
-        name: CHANNEL_NAME,
-        importance: AndroidImportance.HIGH,
-        // notifee's default is silent, unlike Android's own.
-        sound: 'default',
-        vibration: true,
-      });
-      await notifee.deleteChannel(LEGACY_CHANNEL_ID);
-      return channelId;
     } catch (e) {
-      console.log('createChannel failed', e);
-      return CHANNEL_ID;
+      console.log('requestPermission failed', e);
     }
+    return ensureChannel();
   }
 
   /** Normalises a notifee event into the `{data: {page}}` shape screens expect. */
@@ -218,6 +405,8 @@ export default class NotifService {
     notifee.onForegroundEvent(({type, detail}) => {
       if (type === EventType.PRESS) {
         this.deliver(detail.notification);
+      } else if (type === EventType.DELIVERED && this.onDelivered) {
+        this.onDelivered(detail.notification);
       }
     });
 
@@ -233,58 +422,36 @@ export default class NotifService {
       .catch((e) => console.log('getInitialNotification failed', e));
   }
 
-  async scheduleNotif(alarmId, alarmTitle, pageNumber, date) {
-    // Read the time before awaiting: callers reuse one Date object across a
-    // loop, so it may be mutated by the time the channel promise resolves.
-    const timestamp = date.getTime();
-    const channelId = await this.channelReady;
-    const exact = await this.canScheduleExactAlarms();
-    try {
-      await notifee.createTriggerNotification(
-        {
-          id: String(alarmId),
-          title: alarmTitle,
-          body: REMINDER_BODY,
-          // notifee only accepts string values in `data`.
-          data: {page: String(pageNumber)},
-          android: {
-            channelId,
-            smallIcon: 'ic_notification',
-            color: NOTIFICATION_COLOR,
-            pressAction: {id: 'default', launchActivity: 'default'},
-            sound: 'default',
-          },
-          ios: {sound: 'default'},
-        },
-        {
-          type: TriggerType.TIMESTAMP,
-          timestamp,
-          repeatFrequency: RepeatFrequency.WEEKLY,
-          // Without the permission notifee falls back to WorkManager, which
-          // may run a few minutes late but does deliver the reminder.
-          ...(exact && {
-            alarmManager: {type: AlarmType.SET_EXACT_AND_ALLOW_WHILE_IDLE},
-          }),
-        },
-      );
-    } catch (e) {
-      console.log('scheduleNotif failed', e);
-    }
+  /** A weekly reminder; the id is the topic id with the weekday appended. */
+  scheduleNotif(alarmId, alarmTitle, pageNumber, date) {
+    return scheduleReminder({
+      id: alarmId,
+      title: alarmTitle,
+      page: pageNumber,
+      timestamp: date.getTime(),
+      weekly: true,
+    });
   }
 
   /**
-   * Hands back `[{id, title, date, data}]`, matching what the old library
-   * returned, so the index can show which topics have a reminder and at what time.
+   * Hands back `[{id, title, date, data, weekly}]`, matching what the old library
+   * returned plus whether it repeats, so the index can show which topics have a
+   * reminder and when.
    */
-  async getScheduledLocalNotifications(cb) {
+  getScheduledLocalNotifications(cb) {
+    return serial(() => this.readScheduled(cb));
+  }
+
+  async readScheduled(cb) {
     try {
-      const entries = await notifee.getTriggerNotifications();
+      const entries = await triggerNotifications();
       cb(
         entries.map(({notification, trigger}) => ({
           id: notification.id,
           title: notification.title,
           date: trigger && trigger.timestamp ? new Date(trigger.timestamp) : null,
           data: notification.data,
+          weekly: !!trigger && isWeekly(trigger),
         })),
       );
     } catch (e) {
@@ -293,12 +460,8 @@ export default class NotifService {
     }
   }
 
-  async cancelLocalNotifications(id) {
-    try {
-      await notifee.cancelTriggerNotification(String(id));
-    } catch (e) {
-      console.log('cancelLocalNotifications failed', e);
-    }
+  cancelLocalNotifications(id) {
+    return cancelReminder(id);
   }
 
   async removeAllDeliveredNotification() {
