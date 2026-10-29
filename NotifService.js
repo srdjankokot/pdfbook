@@ -9,7 +9,10 @@ import notifee, {
   TriggerType,
 } from '@notifee/react-native';
 
-const CHANNEL_ID = 'pdf-book-channel-id';
+// A channel's sound can never be changed once created, and 1.0 created
+// 'pdf-book-channel-id' without one, so reminders moved to a new channel.
+const CHANNEL_ID = 'reminders';
+const LEGACY_CHANNEL_ID = 'pdf-book-channel-id';
 const CHANNEL_NAME = 'المنبهات';
 // "Tap to open the page" — the title already names the topic.
 const REMINDER_BODY = 'اضغط لفتح الصفحة';
@@ -133,13 +136,14 @@ export default class NotifService {
    * exact-alarm permission: exact alarms once it is granted, WorkManager while
    * it is not. Reminders saved by earlier versions asked for an exact alarm
    * regardless, so without the permission notifee silently never fires them;
-   * they also get the current title, text and icon on the way through.
+   * they also get the current channel, title, text and icon on the way through.
    */
   async syncTriggers() {
     if (Platform.OS !== 'android') {
       return;
     }
     const exact = await this.canScheduleExactAlarms();
+    const channelId = await this.channelReady;
     try {
       const entries = await notifee.getTriggerNotifications();
       await Promise.all(
@@ -147,6 +151,7 @@ export default class NotifService {
           .filter(({notification, trigger}) =>
             trigger &&
             (exact !== !!trigger.alarmManager ||
+              (notification.android || {}).channelId !== channelId ||
               LEGACY_TITLE_SUFFIX.test(notification.title || '')),
           )
           .map(({notification, trigger}) => {
@@ -158,6 +163,7 @@ export default class NotifService {
                 body: REMINDER_BODY,
                 android: {
                   ...notification.android,
+                  channelId,
                   smallIcon: 'ic_notification',
                   color: NOTIFICATION_COLOR,
                 },
@@ -180,12 +186,16 @@ export default class NotifService {
   async setupChannel() {
     try {
       await notifee.requestPermission();
-      return await notifee.createChannel({
+      const channelId = await notifee.createChannel({
         id: CHANNEL_ID,
         name: CHANNEL_NAME,
         importance: AndroidImportance.HIGH,
+        // notifee's default is silent, unlike Android's own.
+        sound: 'default',
         vibration: true,
       });
+      await notifee.deleteChannel(LEGACY_CHANNEL_ID);
+      return channelId;
     } catch (e) {
       console.log('createChannel failed', e);
       return CHANNEL_ID;
