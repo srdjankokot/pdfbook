@@ -90,7 +90,7 @@ android {
         applicationId "com.maqalid.hisnalmumin"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
+        versionCode 5
         versionName "1.0.2"
         // All four ABIs stay in (see reactNativeArchitectures in
         // gradle.properties): the App Bundle splits per device, so a phone only
@@ -120,6 +120,7 @@ android {
         release {
             signingConfig keystoreProperties['storeFile'] ? signingConfigs.upload : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }

@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import {StyleSheet, Dimensions, Platform, StatusBar, View, TouchableOpacity, TextInput, FlatList, Alert, Text, Switch} from 'react-native';
+import {StyleSheet, Dimensions, StatusBar, View, TouchableOpacity, TextInput, FlatList, Alert, Text, Switch} from 'react-native';
 import Pdf from 'react-native-pdf';
 
 import BookContent from './BookContent'
@@ -617,8 +617,9 @@ const styles = StyleSheet.create({
 
   pdf: {
     flex: 1,
-    width: Dimensions.get('window').width * (Platform.OS === 'android' ? 1.01: 1.11),
-    height: Dimensions.get('window').height,
+    // Follows the window as it rotates; a size read once at startup kept the
+    // portrait dimensions after turning the device.
+    alignSelf: 'stretch',
     backgroundColor: colors.background,
   },
 });
