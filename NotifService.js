@@ -381,12 +381,15 @@ export default class NotifService {
     }
   }
 
-  async setupChannel() {
-    try {
-      await notifee.requestPermission();
-    } catch (e) {
-      console.log('requestPermission failed', e);
-    }
+  /**
+   * Asks for the notification permission without waiting for the answer: on a
+   * fast cold start (release builds) the request can come before the activity
+   * is ready and then never settles, and every reminder operation queued
+   * behind the channel would wait with it. The channel itself needs no
+   * permission.
+   */
+  setupChannel() {
+    notifee.requestPermission().catch((e) => console.log('requestPermission failed', e));
     return ensureChannel();
   }
 
