@@ -194,6 +194,7 @@ export default class PDFExample extends React.Component {
     // {latitude, longitude} used for prayer times, or null until asked.
     location: null,
     remindersVisible: false,
+    counterOpen: false,
   }
 
 
@@ -682,6 +683,13 @@ export default class PDFExample extends React.Component {
           <Text style={styles.headerSubtitle} numberOfLines={1}>{BOOK_SUBTITLE}</Text>
         </View>
 
+        <TouchableOpacity
+          style={[styles.counterPill, this.state.counterOpen && styles.counterPillOn]}
+          activeOpacity={0.7}
+          onPress={() => this.setState({counterOpen: !this.state.counterOpen})}>
+          <Text style={styles.pagePillText}>عدّاد</Text>
+        </TouchableOpacity>
+
         {next && (
           <TouchableOpacity
             style={styles.bellPill}
@@ -770,8 +778,12 @@ export default class PDFExample extends React.Component {
 
           />
 
-    {/* Stays mounted so the count survives closing it. */}
-    <Counter />
+    {/* Docked under the book, which shrinks to make room, so the counter
+        never covers the page. Stays mounted so the count survives closing. */}
+    <Counter
+      open={this.state.counterOpen}
+      onClose={() => this.setState({counterOpen: false})}
+    />
 
     <Reminders
       visible={this.state.remindersVisible}
@@ -859,6 +871,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
+  },
+  counterPill: {
+    marginRight: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+  },
+  counterPillOn: {
+    backgroundColor: 'rgba(255,255,255,0.38)',
   },
   bellPill: {
     marginRight: spacing.sm,
