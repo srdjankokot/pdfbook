@@ -1,6 +1,6 @@
 import {PermissionsAndroid, Platform} from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
-import {CalculationMethod, Coordinates, PrayerTimes} from 'adhan';
+import {CalculationMethod, Coordinates, HighLatitudeRule, PrayerTimes} from 'adhan';
 
 import BookContents from './book_content.json';
 import {toArabicDigits} from './format';
@@ -40,14 +40,24 @@ const MOVED_KM = 10;
  * common default. Asr uses the majority (Shafi'i, Maliki, Hanbali) shadow
  * length.
  */
-function parametersFor({latitude, longitude}) {
+function parametersFor(coords) {
+  const {latitude, longitude} = coords;
+  let params;
   if (latitude >= 22 && latitude <= 32 && longitude >= 24 && longitude < 35) {
-    return CalculationMethod.Egyptian();
+    params = CalculationMethod.Egyptian();
+  } else if (latitude >= 12 && latitude <= 32 && longitude >= 35 && longitude <= 60) {
+    params = CalculationMethod.UmmAlQura();
+  } else {
+    params = CalculationMethod.MuslimWorldLeague();
   }
-  if (latitude >= 12 && latitude <= 32 && longitude >= 35 && longitude <= 60) {
-    return CalculationMethod.UmmAlQura();
-  }
-  return CalculationMethod.MuslimWorldLeague();
+  // Above about 48° the sky never gets dark enough in summer for the usual
+  // Fajr angle, and adhan's default then puts Fajr in the middle of the night
+  // (01:01 in London in June). The rule adhan recommends for the latitude
+  // keeps it near dawn; it changes nothing where Fajr can be found normally.
+  params.highLatitudeRule = HighLatitudeRule.recommended(
+    new Coordinates(latitude, longitude),
+  );
+  return params;
 }
 
 /** The next `days` reminder times: `prayer` plus `offset` minutes, future only. */
