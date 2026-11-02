@@ -99,6 +99,15 @@ export default class PDFExample extends React.Component {
     this.refreshContentMenu();
   }
 
+  componentDidUpdate(prevProps, prevState) {
+    // Opening or closing the counter resizes the book, and the PDF view can
+    // then stay scrolled part-way between two pages; snap back to the page.
+    if (prevState.counterOpen !== this.state.counterOpen && this.pdf) {
+      var page = this.state.currentPage;
+      setTimeout(() => this.pdf && this.pdf.setPage(page), 250);
+    }
+  }
+
   async componentDidMount() {
     const [lastPage, favorites, dailyTimes, dailyModes, location, onboarded] = await Promise.all([
       loadJSON('lastPage', 1),
