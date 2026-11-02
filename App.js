@@ -194,7 +194,6 @@ export default class PDFExample extends React.Component {
     // {latitude, longitude} used for prayer times, or null until asked.
     location: null,
     remindersVisible: false,
-    counterVisible: false,
   }
 
 
@@ -771,19 +770,8 @@ export default class PDFExample extends React.Component {
 
           />
 
-    {/* Opens the tasbih counter over the page being read. */}
-    <TouchableOpacity
-      style={styles.counterButton}
-      activeOpacity={0.8}
-      onPress={() => this.setState({counterVisible: true})}>
-      <Text style={styles.counterButtonText}>عدّاد</Text>
-    </TouchableOpacity>
-
-    {/* Kept mounted so the count survives closing it. */}
-    <Counter
-      visible={this.state.counterVisible}
-      onClose={() => this.setState({counterVisible: false})}
-    />
+    {/* Stays mounted so the count survives closing it. */}
+    <Counter />
 
     <Reminders
       visible={this.state.remindersVisible}
@@ -871,24 +859,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
-  },
-  counterButton: {
-    position: 'absolute',
-    left: spacing.lg,
-    bottom: spacing.xl + spacing.lg,
-    minWidth: 56,
-    height: 56,
-    paddingHorizontal: spacing.md,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow(6),
-  },
-  counterButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.surface,
   },
   bellPill: {
     marginRight: spacing.sm,

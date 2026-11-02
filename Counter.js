@@ -1,13 +1,5 @@
 import React, {Component} from 'react';
-import {
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  Vibration,
-  View,
-} from 'react-native';
+import {StyleSheet, Text, TouchableOpacity, Vibration, View} from 'react-native';
 
 import {colors, radius, shadow, spacing} from './theme';
 import {toArabicDigits} from './format';
@@ -19,12 +11,15 @@ const ROUND_PATTERN = [0, 180, 90, 180];
 const ROUND_BUZZ_MS = 450;
 
 /**
- * A tasbih counter over the page being read: the whole circle is the button,
- * so it can be tapped without looking. Reaching the target vibrates longer
- * and starts the next round. The count lives only while the app is open.
+ * A tasbih counter that sits in a corner of the reading screen, small enough
+ * that the adhkar being counted stay readable and the page can still be
+ * turned. The round button counts; next to it the target, reset and close.
+ * Reaching the target vibrates longer and starts the next round. The count
+ * lives only while the app is open.
  */
 export default class Counter extends Component {
   state = {
+    open: false,
     count: 0,
     rounds: 0,
     target: 33,
@@ -51,182 +46,150 @@ export default class Counter extends Component {
     this.setState({count: 0, rounds: 0});
   };
 
-  setTarget(target) {
-    this.setState({target, count: 0, rounds: 0});
-  }
+  /** Steps through the targets; changing it starts counting again. */
+  nextTarget = () => {
+    const index = TARGETS.indexOf(this.state.target);
+    this.setState({target: TARGETS[(index + 1) % TARGETS.length], count: 0, rounds: 0});
+  };
 
   render() {
-    const {visible, onClose} = this.props;
-    const {count, rounds, target} = this.state;
+    const {open, count, rounds, target} = this.state;
+
+    if (!open) {
+      return (
+        <TouchableOpacity
+          style={[styles.corner, styles.openButton]}
+          activeOpacity={0.8}
+          onPress={() => this.setState({open: true})}>
+          <Text style={styles.openText}>عدّاد</Text>
+        </TouchableOpacity>
+      );
+    }
 
     return (
-      <Modal
-        visible={visible}
-        transparent={true}
-        animationType={'slide'}
-        statusBarTranslucent={true}
-        onRequestClose={onClose}>
-        <TouchableWithoutFeedback onPress={onClose}>
-          <View style={styles.backdrop}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.sheet}>
-                <View style={styles.header}>
-                  <Text style={styles.title}>العدّاد</Text>
-                  <TouchableOpacity
-                    onPress={onClose}
-                    hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                    <Text style={styles.close}>×</Text>
-                  </TouchableOpacity>
-                </View>
+      <View style={[styles.corner, styles.bar]}>
+        <TouchableOpacity style={styles.circle} activeOpacity={0.8} onPress={this.tap}>
+          <Text style={styles.count}>{toArabicDigits(count)}</Text>
+          {target > 0 && <Text style={styles.of}>من {toArabicDigits(target)}</Text>}
+        </TouchableOpacity>
 
-                <View style={styles.targets}>
-                  {TARGETS.map((t) => (
-                    <TouchableOpacity
-                      key={t}
-                      style={[styles.target, t === target && styles.targetOn]}
-                      activeOpacity={0.7}
-                      onPress={() => this.setTarget(t)}>
-                      <Text style={[styles.targetText, t === target && styles.targetTextOn]}>
-                        {t === 0 ? 'بلا حد' : toArabicDigits(t)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.circle}
-                  activeOpacity={0.85}
-                  onPress={this.tap}>
-                  <Text style={styles.count}>{toArabicDigits(count)}</Text>
-                  {target > 0 && (
-                    <Text style={styles.of}>من {toArabicDigits(target)}</Text>
-                  )}
-                </TouchableOpacity>
-
-                <View style={styles.footer}>
-                  <Text style={styles.rounds}>
-                    {target > 0 ? 'الدورات المكتملة: ' + toArabicDigits(rounds) : 'اضغط على الدائرة للعدّ'}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.reset}
-                    activeOpacity={0.7}
-                    onPress={this.reset}>
-                    <Text style={styles.resetText}>إعادة</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </TouchableWithoutFeedback>
+        <View style={styles.side}>
+          <TouchableOpacity style={styles.chip} activeOpacity={0.7} onPress={this.nextTarget}>
+            <Text style={styles.chipText}>
+              {target > 0 ? 'العدد: ' + toArabicDigits(target) : 'بلا حد'}
+            </Text>
+          </TouchableOpacity>
+          {target > 0 && rounds > 0 && (
+            <Text style={styles.rounds}>الدورات: {toArabicDigits(rounds)}</Text>
+          )}
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={styles.icon}
+              activeOpacity={0.7}
+              hitSlop={{top: 6, bottom: 6, left: 6, right: 6}}
+              onPress={this.reset}>
+              <Text style={styles.iconText}>↺</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.icon}
+              activeOpacity={0.7}
+              hitSlop={{top: 6, bottom: 6, left: 6, right: 6}}
+              onPress={() => this.setState({open: false})}>
+              <Text style={styles.iconText}>×</Text>
+            </TouchableOpacity>
           </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        </View>
+      </View>
     );
   }
 }
 
-const CIRCLE = 200;
+const CIRCLE = 84;
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(12, 32, 24, 0.25)',
+  corner: {
+    position: 'absolute',
+    left: spacing.lg,
+    bottom: spacing.xl + spacing.lg,
   },
-  sheet: {
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 480,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xl + spacing.lg,
-    ...shadow(16),
-  },
-  header: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  close: {
-    fontSize: 26,
-    lineHeight: 28,
-    color: colors.textMuted,
-  },
-  targets: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginTop: spacing.md,
-  },
-  target: {
-    minWidth: 48,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    margin: 3,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  targetOn: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  targetText: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  targetTextOn: {
-    color: colors.surface,
-    fontWeight: '700',
-  },
-  circle: {
-    alignSelf: 'center',
-    width: CIRCLE,
-    height: CIRCLE,
-    borderRadius: CIRCLE / 2,
-    marginTop: spacing.lg,
+  openButton: {
+    minWidth: 56,
+    height: 56,
+    paddingHorizontal: spacing.md,
+    borderRadius: 28,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow(6),
   },
+  openText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.surface,
+  },
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    ...shadow(8),
+  },
+  circle: {
+    width: CIRCLE,
+    height: CIRCLE,
+    borderRadius: CIRCLE / 2,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   count: {
-    fontSize: 64,
-    fontWeight: '300',
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '600',
     color: colors.surface,
   },
   of: {
-    marginTop: -4,
-    fontSize: 15,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.8)',
   },
-  footer: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: spacing.lg,
+  side: {
+    marginLeft: spacing.sm,
+    alignItems: 'flex-start',
   },
-  rounds: {
-    fontSize: 14,
-    color: colors.textMuted,
-  },
-  reset: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
+  chip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  resetText: {
-    fontSize: 13,
+  chipText: {
+    fontSize: 12,
     fontWeight: '600',
     color: colors.primary,
+  },
+  rounds: {
+    marginTop: 4,
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  actions: {
+    flexDirection: 'row',
+    marginTop: 6,
+  },
+  icon: {
+    width: 30,
+    height: 30,
+    marginRight: spacing.xs,
+    borderRadius: 15,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconText: {
+    fontSize: 17,
+    lineHeight: 20,
+    color: colors.textMuted,
   },
 });
